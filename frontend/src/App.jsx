@@ -13,8 +13,13 @@ import {
   Terminal,
   Server,
   Layers,
-  ArrowRight,
-  Flame
+  Flame,
+  Bot,
+  X,
+  Copy,
+  Check,
+  ExternalLink,
+  ChevronRight
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -63,6 +68,13 @@ export default function App() {
   const [snifferRunning, setSnifferRunning] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [filterSeverity, setFilterSeverity] = useState('ALL');
+
+  // AI Copilot state
+  const [activeAnalysis, setActiveAnalysis] = useState(null);
+  const [analyzingAlert, setAnalyzingAlert] = useState(null);
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+  const [copiedType, setCopiedType] = useState(null);
+
   const wsRef = useRef(null);
 
   // Connect WebSocket
@@ -76,9 +88,7 @@ export default function App() {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
-      ws.onopen = () => {
-        setConnected(true);
-      };
+      ws.onopen = () => setConnected(true);
 
       ws.onmessage = (event) => {
         try {
@@ -107,9 +117,7 @@ export default function App() {
         reconnectTimer = setTimeout(connect, 2500);
       };
 
-      ws.onerror = () => {
-        ws.close();
-      };
+      ws.onerror = () => ws.close();
     }
 
     connect();
@@ -171,6 +179,33 @@ export default function App() {
     }
   };
 
+  // Trigger AI Threat Copilot
+  const handleExplainThreat = async (alert) => {
+    setAnalyzingAlert(alert);
+    setLoadingAnalysis(true);
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/explain-threat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(alert)
+      });
+      if (res.ok) {
+        const analysis = await res.json();
+        setActiveAnalysis(analysis);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingAnalysis(false);
+    }
+  };
+
+  const copyToClipboard = (text, type) => {
+    navigator.clipboard.writeText(text);
+    setCopiedType(type);
+    setTimeout(() => setCopiedType(null), 2000);
+  };
+
   // Prepare chart data
   const protoChartData = Object.entries(metrics.protocol_distribution || {}).map(([name, value]) => ({
     name,
@@ -203,7 +238,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30">
       {/* Top Navbar */}
-      <header className="border-b border-slate-800/80 bg-[#0d1322]/80 backdrop-blur sticky top-0 z-50 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+      <header className="border-b border-slate-800/80 bg-[#0d1322]/80 backdrop-blur sticky top-0 z-40 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
           <div className="p-2.5 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 shadow-lg shadow-cyan-500/20">
             <Radio className="w-6 h-6 text-white animate-spin-slow" />
@@ -214,28 +249,25 @@ export default function App() {
                 CyberShield <span className="text-cyan-400 font-mono text-sm uppercase px-2 py-0.5 rounded bg-cyan-950 border border-cyan-800">AI-NIDS</span>
               </h1>
             </div>
-            <p className="text-xs text-slate-400">Autonomous Network Intrusion Detection & Threat Scoring System</p>
+            <p className="text-xs text-slate-400">Autonomous Network Intrusion Detection & AI Copilot</p>
           </div>
         </div>
 
         {/* Global Controls & Status */}
         <div className="flex items-center space-x-4">
-          {/* Live WebSocket status */}
           <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-xs">
             <span className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-emerald-400 shadow-sm shadow-emerald-400 animate-ping' : 'bg-red-500'}`} />
             <span className="text-slate-300 font-mono">{connected ? 'LIVE TELEMETRY' : 'OFFLINE'}</span>
           </div>
 
-          {/* Threat Level */}
           <div className={`px-3 py-1.5 rounded-lg border text-xs font-bold tracking-wider uppercase flex items-center gap-1.5 ${getThreatBadge(metrics.active_threat_level)}`}>
             <Flame className="w-4 h-4" />
             <span>THREAT: {metrics.active_threat_level}</span>
           </div>
 
-          {/* Sniffer Button */}
           <button
             onClick={toggleSniffer}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all ${
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
               snifferRunning
                 ? 'bg-rose-600/20 border border-rose-500/40 text-rose-300 hover:bg-rose-600/30'
                 : 'bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30'
@@ -264,7 +296,7 @@ export default function App() {
               </div>
             </div>
             <div className="mt-3 text-xs text-slate-400 flex items-center gap-1 font-mono">
-              <span className="text-emerald-400">● Real-time stream</span>
+              <span className="text-emerald-400">● Streaming WebSocket</span>
             </div>
           </div>
 
@@ -310,9 +342,9 @@ export default function App() {
           <div className="bg-[#0f172a]/70 border border-slate-800 rounded-xl p-5 relative overflow-hidden">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-xs uppercase font-medium text-slate-400">ML Engine Status</p>
-                <h3 className="text-xl font-bold text-cyan-400 mt-1">
-                  Isolation Forest
+                <p className="text-xs uppercase font-medium text-slate-400">AI Threat Copilot</p>
+                <h3 className="text-xl font-bold text-cyan-400 mt-1 flex items-center gap-1.5">
+                  <Bot className="w-5 h-5 text-cyan-400" /> Active
                 </h3>
               </div>
               <div className="p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-cyan-400">
@@ -320,8 +352,8 @@ export default function App() {
               </div>
             </div>
             <div className="mt-3 text-xs text-slate-400 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-cyan-400" />
-              <span>Unsupervised Outlier Active</span>
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              <span>MITRE ATT&CK & Auto-Remediation</span>
             </div>
           </div>
         </div>
@@ -335,7 +367,7 @@ export default function App() {
                 Live Intrusion & Threat Simulator
               </h2>
               <p className="text-xs text-slate-400">
-                Trigger attack vectors to evaluate real-time heuristic rules, machine learning detection, and risk scoring.
+                Trigger attack vectors to evaluate heuristic rules, Isolation Forest anomaly scoring, and AI Copilot responses.
               </p>
             </div>
             {simulating && (
@@ -398,7 +430,6 @@ export default function App() {
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Attack Breakdown Chart */}
           <div className="bg-[#0f172a]/70 border border-slate-800 rounded-xl p-5 lg:col-span-2">
             <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-rose-400" />
@@ -424,7 +455,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Protocol Distribution */}
           <div className="bg-[#0f172a]/70 border border-slate-800 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">
               <Layers className="w-4 h-4 text-cyan-400" />
@@ -471,13 +501,12 @@ export default function App() {
               </span>
             </div>
 
-            {/* Filter Buttons */}
             <div className="flex items-center space-x-1.5 text-xs">
               {['ALL', 'CRITICAL', 'HIGH', 'MEDIUM'].map((sev) => (
                 <button
                   key={sev}
                   onClick={() => setFilterSeverity(sev)}
-                  className={`px-2.5 py-1 rounded-md transition ${
+                  className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
                     filterSeverity === sev ? 'bg-cyan-600 text-white font-semibold' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -494,10 +523,11 @@ export default function App() {
                   <th className="py-2.5 px-4">Timestamp</th>
                   <th className="py-2.5 px-4">Severity</th>
                   <th className="py-2.5 px-4">Threat Type</th>
-                  <th className="py-2.5 px-4">Risk Score</th>
-                  <th className="py-2.5 px-4">Source IP</th>
-                  <th className="py-2.5 px-4">Destination</th>
-                  <th className="py-2.5 px-4">Forensic Details</th>
+                  <th className="py-2.5 px-4">Risk</th>
+                  <th className="py-2.5 px-4">Attacker (Src)</th>
+                  <th className="py-2.5 px-4">Target (Dst)</th>
+                  <th className="py-2.5 px-4">Forensics</th>
+                  <th className="py-2.5 px-4 text-center">AI Copilot</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -514,9 +544,9 @@ export default function App() {
                       </td>
                       <td className="py-2.5 px-4 font-semibold text-rose-300">{alert.attack_type}</td>
                       <td className="py-2.5 px-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <span className="font-bold text-white">{alert.risk_score}</span>
-                          <div className="w-12 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                          <div className="w-10 bg-slate-800 rounded-full h-1.5 overflow-hidden">
                             <div
                               className={`h-full ${alert.risk_score > 75 ? 'bg-red-500' : 'bg-amber-500'}`}
                               style={{ width: `${alert.risk_score}%` }}
@@ -528,12 +558,21 @@ export default function App() {
                       <td className="py-2.5 px-4 text-slate-300">
                         {alert.dst_ip}:{alert.dst_port}
                       </td>
-                      <td className="py-2.5 px-4 text-slate-400 max-w-xs truncate">{alert.details}</td>
+                      <td className="py-2.5 px-4 text-slate-400 max-w-[200px] truncate">{alert.details}</td>
+                      <td className="py-2.5 px-4 text-center">
+                        <button
+                          onClick={() => handleExplainThreat(alert)}
+                          className="px-2.5 py-1 bg-gradient-to-r from-cyan-600/30 to-blue-600/30 hover:from-cyan-600/50 hover:to-blue-600/50 border border-cyan-500/40 rounded text-cyan-300 text-[11px] font-sans font-medium flex items-center gap-1 mx-auto transition cursor-pointer"
+                        >
+                          <Bot className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>Explain with AI</span>
+                        </button>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="py-6 text-center text-slate-500">
+                    <td colSpan={8} className="py-6 text-center text-slate-500">
                       No security alerts matching current filter.
                     </td>
                   </tr>
@@ -607,6 +646,142 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* AI Threat Copilot Modal / Drawer */}
+      {(activeAnalysis || loadingAnalysis) && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0e1628] border border-cyan-500/40 rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex justify-between items-start border-b border-slate-800 pb-4 mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-gradient-to-tr from-cyan-600 to-indigo-600 rounded-xl shadow-lg shadow-cyan-500/20">
+                  <Bot className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    CyberShield AI Threat Copilot
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Incident Forensic Diagnosis & Automated Remediation
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setActiveAnalysis(null);
+                  setAnalyzingAlert(null);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {loadingAnalysis ? (
+              <div className="py-12 flex flex-col items-center justify-center space-y-3">
+                <RefreshCw className="w-8 h-8 text-cyan-400 animate-spin" />
+                <p className="text-sm font-mono text-cyan-300">
+                  Synthesizing packet features & MITRE ATT&CK techniques...
+                </p>
+              </div>
+            ) : activeAnalysis && (
+              <div className="space-y-5">
+                {/* Threat Banner & MITRE Badge */}
+                <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-wrap justify-between items-center gap-3">
+                  <div>
+                    <span className="text-xs uppercase tracking-wider text-slate-400 font-mono">Targeted Attack</span>
+                    <h4 className="text-base font-bold text-rose-300">{analyzingAlert?.attack_type}</h4>
+                    <p className="text-xs text-slate-400 font-mono mt-0.5">
+                      Attacker: <span className="text-cyan-400">{analyzingAlert?.src_ip}</span> ➔ Target: <span className="text-slate-200">{analyzingAlert?.dst_ip}:{analyzingAlert?.dst_port}</span>
+                    </p>
+                  </div>
+                  <div className="bg-cyan-950/60 border border-cyan-800/80 rounded-lg px-3 py-1.5 text-right">
+                    <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider block">MITRE ATT&CK</span>
+                    <span className="text-xs font-mono font-bold text-white">
+                      {activeAnalysis.mitre_attack?.id}: {activeAnalysis.mitre_attack?.name}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Plain English Summary */}
+                <div>
+                  <h5 className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-1.5">Forensic Diagnosis</h5>
+                  <p className="text-sm text-slate-200 bg-slate-900/50 p-3.5 rounded-lg border border-slate-800/80 leading-relaxed">
+                    {activeAnalysis.threat_summary}
+                  </p>
+                </div>
+
+                {/* Mechanics & Impact */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="bg-slate-900/40 border border-slate-800 rounded-lg p-3">
+                    <h6 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Vector Mechanics</h6>
+                    <p className="text-xs text-slate-300">{activeAnalysis.mechanics_explanation}</p>
+                  </div>
+                  <div className="bg-slate-900/40 border border-slate-800 rounded-lg p-3">
+                    <h6 className="text-[11px] font-bold text-amber-400 uppercase tracking-wider mb-1">Impact Risk</h6>
+                    <p className="text-xs text-slate-300">{activeAnalysis.impact_assessment}</p>
+                  </div>
+                </div>
+
+                {/* Recommended Incident Response Actions */}
+                <div>
+                  <h5 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">Recommended SOC Actions</h5>
+                  <ul className="space-y-1.5 text-xs text-slate-300">
+                    {activeAnalysis.recommended_actions?.map((act, i) => (
+                      <li key={i} className="flex items-start gap-2 bg-slate-900/30 p-2 rounded border border-slate-800/50">
+                        <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <span>{act}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* 1-Click Automated Firewall Rules */}
+                <div>
+                  <h5 className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-2">
+                    1-Click Firewall Containment Commands
+                  </h5>
+                  <div className="space-y-2">
+                    {/* Windows PowerShell */}
+                    <div className="bg-black/60 rounded-lg p-2.5 border border-slate-800 flex justify-between items-center gap-2">
+                      <div className="overflow-x-auto">
+                        <span className="text-[10px] text-blue-400 font-bold block mb-0.5">Windows PowerShell:</span>
+                        <code className="text-xs font-mono text-slate-200">
+                          {activeAnalysis.firewall_rules?.windows_powershell}
+                        </code>
+                      </div>
+                      <button
+                        onClick={() => copyToClipboard(activeAnalysis.firewall_rules?.windows_powershell, 'ps')}
+                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 shrink-0 transition cursor-pointer"
+                      >
+                        {copiedType === 'ps' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedType === 'ps' ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
+
+                    {/* Linux iptables */}
+                    <div className="bg-black/60 rounded-lg p-2.5 border border-slate-800 flex justify-between items-center gap-2">
+                      <div className="overflow-x-auto">
+                        <span className="text-[10px] text-amber-400 font-bold block mb-0.5">Linux iptables:</span>
+                        <code className="text-xs font-mono text-slate-200">
+                          {activeAnalysis.firewall_rules?.linux_iptables}
+                        </code>
+                      </div>
+                      <button
+                        onClick={() => copyToClipboard(activeAnalysis.firewall_rules?.linux_iptables, 'iptables')}
+                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 shrink-0 transition cursor-pointer"
+                      >
+                        {copiedType === 'iptables' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedType === 'iptables' ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

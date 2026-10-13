@@ -9,6 +9,7 @@ from app.schemas import AlertResponse, SimulationRequest, SnifferControlRequest
 from app.engine.alert_manager import alert_manager
 from app.engine.packet_sniffer import sniffer
 from app.engine.traffic_simulator import simulator
+from app.engine.ai_copilot import copilot
 
 router = APIRouter()
 
@@ -93,4 +94,12 @@ async def toggle_background_traffic(enable: bool = True):
         simulator.stop()
         return {"background_traffic": "disabled"}
     return {"background_traffic": "already_in_state"}
+
+@router.post("/explain-threat")
+def explain_threat(alert: dict):
+    """
+    AI Copilot: Generates plain-English threat diagnosis,
+    MITRE ATT&CK technique mapping, and automated firewall remediation rules.
+    """
+    return copilot.analyze_threat(alert)
 
